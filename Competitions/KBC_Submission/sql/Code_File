@@ -1,0 +1,241 @@
+# a. Return the ClientID, Age and Sex of all customers who have more than four credit transactions
+
+SELECT 
+    Client, Sex, Age
+FROM
+    soc_dem
+WHERE
+    Client IN (SELECT 
+            Client
+        FROM
+            inflow_outflow
+        WHERE
+            TransactionsCred > 4);
+# b. Return all males who have a savings account
+
+SELECT 
+    Client
+FROM
+    soc_dem
+WHERE
+    Sex = 'M'
+        AND Client IN (SELECT 
+            Client
+        FROM
+            products_actbalance
+        WHERE
+            Count_SA > 0)
+ORDER BY Client
+;
+
+
+# c. Return the average monthly debit turnover for all males who have a savings account
+
+SELECT 
+    AVG(VolumeDeb) AS AverageDebit
+FROM
+    inflow_outflow
+WHERE
+    Client IN (SELECT 
+            Client
+        FROM
+            soc_dem
+        WHERE
+            Sex = 'M'
+                AND Client IN (SELECT 
+                    Client
+                FROM
+                    products_actbalance
+                WHERE
+                    Count_SA > 0))
+;
+
+#d. Return count of all females who have a current account, binned by age in the following bins: 0-19 years, 20-59 years, and 60+ years
+
+SELECT 
+    COUNT(CASE
+        WHEN `Age` BETWEEN 0 AND 19 THEN 1
+    END) `0-19`,
+    COUNT(CASE
+        WHEN `Age` BETWEEN 20 AND 59 THEN 2
+    END) `20-59`,
+    COUNT(CASE
+        WHEN `Age` > 60 THEN 3
+    END) `60+`
+FROM
+    soc_dem
+WHERE
+    Sex = 'F'
+        AND Client IN (SELECT 
+            Client
+        FROM
+            products_actbalance
+        WHERE
+            Count_CA > 0)
+;
+#e. Return the age and sex of all customers with a monthly credit and debit turnover that is higher than the average for either of those metrics
+
+SELECT 
+    Client, Sex, Age
+FROM
+    soc_dem
+WHERE
+    Client IN (SELECT 
+            Client
+        FROM
+            inflow_outflow
+        WHERE
+            VolumeCred
+                AND VolumeDeb > (SELECT 
+                    AVG(VolumeCred) OR AVG(VolumeDeb)
+                FROM
+                    inflow_outflow))
+;
+#f. Create a view that joins all tables and return all information for each of the customers. 
+## For example, the view should return Soc_Dem, Product balances, inflow and outflow and sales revenues information for each customer
+
+################# Code to return all the column names ###################################################
+
+SELECT 
+    (CASE
+        WHEN
+            column_name = 'Client'
+                AND table_name = 'soc_dem'
+        THEN
+            's.Soc_dem_Client'
+        WHEN
+            column_name = 'Client'
+                AND table_name = 'products_actbalance'
+        THEN
+            'p.products_Client'
+        WHEN table_name = 'soc_dem' THEN CONCAT('s.', column_name)
+        WHEN table_name = 'products_actbalance' THEN CONCAT('p.', column_name)
+        WHEN
+            column_name = 'Client'
+                AND table_name = 'inflow_outflow'
+        THEN
+            'i.inflow_Client'
+        WHEN
+            column_name = 'Client'
+                AND table_name = 'sales_revenues'
+        THEN
+            'r.sales_Client'
+        WHEN table_name = 'inflow_outflow' THEN CONCAT('i.', column_name)
+        WHEN table_name = 'sales_revenues' THEN CONCAT('r.', column_name)
+    END) AS column_name
+FROM
+    information_schema.columns
+WHERE
+    table_name IN ('soc_dem' , 'products_actbalance',
+        'inflow_outflow',
+        'sales_revenues')
+
+
+############################### Generate a view #############################################################
+
+VIEW `customer_view` AS
+    (SELECT 
+        `s`.`Client` AS `Client`,
+        `s`.`Sex` AS `Sex`,
+        `s`.`Age` AS `Age`,
+        `s`.`Tenure` AS `Tenure`,
+        `p`.`Count_CA` AS `Count_CA`,
+        `p`.`Count_SA` AS `Count_SA`,
+        `p`.`Count_MF` AS `Count_MF`,
+        `p`.`Count_OVD` AS `Count_OVD`,
+        `p`.`Count_CC` AS `Count_CC`,
+        `p`.`Count_CL` AS `Count_CL`,
+        `p`.`ActBal_CA` AS `ActBal_CA`,
+        `p`.`ActBal_SA` AS `ActBal_SA`,
+        `p`.`ActBal_MF` AS `ActBal_MF`,
+        `p`.`ActBal_OVD` AS `ActBal_OVD`,
+        `p`.`ActBal_CC` AS `ActBal_CC`,
+        `p`.`ActBal_CL` AS `ActBal_CL`,
+        `i`.`VolumeCred` AS `VolumeCred`,
+        `i`.`VolumeCred_CA` AS `VolumeCred_CA`,
+        `i`.`TransactionsCred` AS `TransactionsCred`,
+        `i`.`TransactionsCred_CA` AS `TransactionsCred_CA`,
+        `i`.`VolumeDeb` AS `VolumeDeb`,
+        `i`.`VolumeDeb_CA` AS `VolumeDeb_CA`,
+        `i`.`VolumeDebCash_Card` AS `VolumeDebCash_Card`,
+        `i`.`VolumeDebCashless_Card` AS `VolumeDebCashless_Card`,
+        `i`.`VolumeDeb_PaymentOrder` AS `VolumeDeb_PaymentOrder`,
+        `i`.`TransactionsDeb` AS `TransactionsDeb`,
+        `i`.`TransactionsDeb_CA` AS `TransactionsDeb_CA`,
+        `i`.`TransactionsDebCash_Card` AS `TransactionsDebCash_Card`,
+        `i`.`TransactionsDebCashless_Card` AS `TransactionsDebCashless_Card`,
+        `i`.`TransactionsDeb_PaymentOrder` AS `TransactionsDeb_PaymentOrder`,
+        `r`.`Sale_MF` AS `Sale_MF`,
+        `r`.`Sale_CC` AS `Sale_CC`,
+        `r`.`Sale_CL` AS `Sale_CL`,
+        `r`.`Revenue_MF` AS `Revenue_MF`,
+        `r`.`Revenue_CC` AS `Revenue_CC`,
+        `r`.`Revenue_CL` AS `Revenue_CL`
+    FROM
+        (((`soc_dem` `s`
+        JOIN `products_actbalance` `p`)
+        JOIN `inflow_outflow` `i`)
+        JOIN `sales_revenues` `r`)
+    WHERE
+        ((`s`.`Client` = `p`.`Client`)
+            AND (`s`.`Client` = `i`.`Client`)
+            AND (`s`.`Client` = `r`.`Client`)))
+
+#g. Using this view identify the top 50 customers who you deem most valuable to the bank. 
+#Please define your definition of a valuable customer, and provide a snapshot of your output.( for Definition please see the attached word document)
+
+SELECT 
+    client
+FROM
+    customer_view
+WHERE
+    Age BETWEEN 35 AND 55
+        AND Tenure > (SELECT 
+            AVG(Tenure)
+        FROM
+            customer_view)
+        AND (SELECT 
+            (ActBal_CA > (SELECT 
+                        AVG(ActBal_CA)
+                    FROM
+                        customer_view)
+                    OR ActBal_SA > (SELECT 
+                        AVG(ActBal_SA)
+                    FROM
+                        customer_view)
+                    OR ActBal_OVD > (SELECT 
+                        AVG(ActBal_OVD)
+                    FROM
+                        customer_view)
+                    OR ActBal_CC > (SELECT 
+                        AVG(ActBal_CC)
+                    FROM
+                        customer_view))
+                    OR (SELECT 
+                        (VolumeDeb > (SELECT 
+                                    AVG(VolumeDeb)
+                                FROM
+                                    customer_view)
+                                OR VolumeCred > (SELECT 
+                                    AVG(VolumeCred)
+                                FROM
+                                    customer_view)
+                                AND (SELECT 
+                                    ((Revenue_MF > (SELECT 
+                                                AVG(Revenue_MF)
+                                            FROM
+                                                customer_view)
+                                            OR Revenue_CC > (SELECT 
+                                                AVG(Revenue_CC)
+                                            FROM
+                                                customer_view)
+                                            OR Revenue_CL > (SELECT 
+                                                AVG(Revenue_CL)
+                                            FROM
+                                                customer_view)))
+                                ))
+                    )
+        )
+LIMIT 50
+
+;
